@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lesson Teleprompter Review"
+  short_description: "Revisiona e corregge teleprompter didattici"
+  default_prompt: "Use $lesson-teleprompter-review to review, annotate, and correct these Italian lesson teleprompter files."

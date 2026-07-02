@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lesson Slides"
+  short_description: "Crea slide didattiche nello stile scuro SQL"
+  default_prompt: "Use $lesson-slides to create a lesson deck that follows the established dark classroom slide style."

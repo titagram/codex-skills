@@ -1,0 +1,4 @@
+interface:
+  display_name: "SSH Backend Agent Temp"
+  short_description: "Apri il backend Laravel via SSH"
+  default_prompt: "Use $ssh-backend-agent-temp to connect to the Laravel backend agent over SSH."

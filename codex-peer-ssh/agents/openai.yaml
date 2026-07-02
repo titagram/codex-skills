@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Peer SSH"
+  short_description: "Run a persistent remote Codex peer over SSH"
+  default_prompt: "Use $codex-peer-ssh to start a persistent remote Codex peer over SSH."

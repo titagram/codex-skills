@@ -1,0 +1,7 @@
+interface:
+  display_name: "Senior Project Execution"
+  short_description: "Autonomous senior engineering delivery"
+  default_prompt: "Use $senior-project-execution to autonomously improve this project on the current dedicated branch without pushing."
+
+policy:
+  allow_implicit_invocation: false

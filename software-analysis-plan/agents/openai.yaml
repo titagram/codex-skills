@@ -1,0 +1,7 @@
+interface:
+  display_name: "Software Analysis Plan"
+  short_description: "Plan production readiness work"
+  default_prompt: "Use $software-analysis-plan to analyze this repository and create a path-aware production-readiness plan without changing application code."
+
+policy:
+  allow_implicit_invocation: false

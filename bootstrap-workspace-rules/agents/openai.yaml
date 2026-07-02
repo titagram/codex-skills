@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bootstrap Workspace Rules"
+  short_description: "Create project rules and operating docs"
+  default_prompt: "Use $bootstrap-workspace-rules to create project-specific AGENTS.md rules, docs, indexes, and audit checks for this workspace."

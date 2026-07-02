@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{DECK_TITLE}}</title>
+    <meta name="description" content="{{DECK_DESCRIPTION}}">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="presentation-container">
+        <div class="slide slide-title active" id="slide-1">
+            <h1>{{DECK_TITLE}}</h1>
+            <h3>{{DECK_SUBTITLE}}</h3>
+            <p>{{DECK_META}}</p>
+        </div>
+
+        <div class="slide" id="slide-2">
+            <h2>Concetto chiave</h2>
+            <div class="two-col">
+                <div>
+                    <p>Presenta il concetto partendo dal problema operativo che gli studenti devono riconoscere.</p>
+                    <ul>
+                        <li>Esplicita che cosa deve essere capito.</li>
+                        <li>Collega il concetto a un caso piccolo e concreto.</li>
+                        <li>Chiudi con un controllo visibile del risultato atteso.</li>
+                    </ul>
+                </div>
+                <div class="diagram-container">
+                    <div class="flowchart-css">
+                        <div class="fc-node fc-dark">Idea iniziale</div>
+                        <div class="fc-arrow"></div>
+                        <div class="fc-node fc-blue fc-border-blue">Passo operativo</div>
+                        <div class="fc-arrow"></div>
+                        <div class="fc-node fc-purple fc-border-purple">Verifica</div>
+                        <div class="fc-arrow"></div>
+                        <div class="fc-node fc-green fc-border-green">Risultato</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" id="slide-3">
+            <h2>Esempio guidato</h2>
+            <div class="two-col">
+                <div>
+                    <p>Trasforma la spiegazione in una sequenza leggibile e verificabile.</p>
+                    <div class="code-example"><span class="label-lang">SQL</span>
+SELECT colonne
+FROM tabella
+WHERE condizione;</div>
+                    <ul>
+                        <li>Leggi la domanda in linguaggio naturale.</li>
+                        <li>Individua tabella, colonne e filtro.</li>
+                        <li>Confronta il risultato con l'atteso.</li>
+                    </ul>
+                </div>
+                <div class="diagram-container">
+                    <table class="comparison-table">
+                        <tr><th>Parte</th><th>Ruolo</th><th>Controllo</th></tr>
+                        <tr><td><code>SELECT</code></td><td>colonne da mostrare</td><td>sono quelle richieste?</td></tr>
+                        <tr><td><code>FROM</code></td><td>tabella di partenza</td><td>contiene i dati?</td></tr>
+                        <tr><td><code>WHERE</code></td><td>filtro sulle righe</td><td>risponde alla domanda?</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" id="slide-4">
+            <h2>Errori da evitare</h2>
+            <div class="two-col">
+                <div>
+                    <p>Rendi visibile dove il ragionamento si puo spezzare.</p>
+                    <ul>
+                        <li>Applicare la sintassi senza avere chiaro il risultato atteso.</li>
+                        <li>Saltare i controlli intermedi.</li>
+                        <li>Confondere il concetto con un dettaglio tecnico.</li>
+                    </ul>
+                    <div class="warning-box">Controlla sempre significato, ordine dei passi e risultato finale.</div>
+                </div>
+                <div class="diagram-container">
+                    <div class="card-row" style="flex-direction: column; gap: 10px;">
+                        <div class="info-card red"><h4>Errore 1</h4><p>Obiettivo non chiaro</p></div>
+                        <div class="info-card yellow"><h4>Errore 2</h4><p>Controllo saltato</p></div>
+                        <div class="info-card blue"><h4>Errore 3</h4><p>Risultato non verificato</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" id="slide-5">
+            <h2>Mini-check</h2>
+            <div class="two-col">
+                <div>
+                    <p>Chiudi il blocco con una checklist utile per studio e laboratorio.</p>
+                    <ul>
+                        <li>So spiegare il concetto in una frase?</li>
+                        <li>So applicarlo su un esempio minimo?</li>
+                        <li>So controllare se il risultato e coerente?</li>
+                    </ul>
+                </div>
+                <div class="diagram-container">
+                    <div class="card-row" style="flex-direction: column; gap: 10px;">
+                        <div class="info-card green"><h4>Capire</h4><p>significato essenziale</p></div>
+                        <div class="info-card blue"><h4>Applicare</h4><p>caso guidato</p></div>
+                        <div class="info-card yellow"><h4>Verificare</h4><p>controllo finale</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="prevBtn" onclick="prevSlide()">&#8592; Precedente</button>
+        <span id="slide-counter">1 / 5</span>
+        <button id="nextBtn" onclick="nextSlide()">Successiva &#8594;</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

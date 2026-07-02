@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reverse Engineering"
+  short_description: "Analyze unknown targets without modifying them"
+  default_prompt: "Use $reverse-engineering to analyze this unknown project and produce a structured reverse engineering report without modifying it."

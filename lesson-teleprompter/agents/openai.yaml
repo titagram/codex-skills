@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lesson Teleprompter"
+  short_description: "Scrive teleprompter didattici scorrevoli"
+  default_prompt: "Use $lesson-teleprompter to rewrite this lesson teleprompter in a clear, concrete, student-friendly spoken style."

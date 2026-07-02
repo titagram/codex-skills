@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lesson Markdown"
+  short_description: "Generate lesson markdown coordinators"
+  default_prompt: "Use $lesson-markdown to inspect this curriculum CSV, ask me the target lesson duration, and generate per-chapter coordinator markdowns with teleprompter estimates at 120 words per minute."
