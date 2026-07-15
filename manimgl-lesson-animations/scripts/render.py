@@ -226,6 +226,10 @@ def _snapshot(output):
     output = Path(output)
     if not output.is_dir():
         return {}
+    try:
+        output = output.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return {}
     snapshot = {}
     for candidate in output.rglob("*"):
         if candidate.is_file() and not candidate.is_symlink():

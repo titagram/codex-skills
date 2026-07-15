@@ -11,7 +11,8 @@ from pathlib import Path
 
 
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
-FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+FENCE_CLOSE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})[ \t]*$")
 DEFAULT_VERIFICATION_CONTRACT = {
     "media_type": "video",
     "width": 1920,
@@ -31,16 +32,20 @@ def storyboard_approval(text):
         return None
     in_fence = None
     for line in text.splitlines():
-        fence = FENCE_RE.match(line)
-        if fence:
-            marker = fence.group(1)[0]
-            if in_fence is None:
-                in_fence = marker
-            elif marker == in_fence:
-                in_fence = None
+        if in_fence is not None:
+            closing = FENCE_CLOSE_RE.fullmatch(line)
+            if closing:
+                run = closing.group("fence")
+                if run[0] == in_fence[0] and len(run) >= in_fence[1]:
+                    in_fence = None
+            continue
+        opening = FENCE_OPEN_RE.match(line)
+        if opening:
+            run = opening.group("fence")
+            in_fence = (run[0], len(run))
             continue
         if line in {"Approval: APPROVED", "Approval: PENDING"}:
-            return line.split(": ", 1)[1] if in_fence is None else None
+            return line.split(": ", 1)[1]
     return None
 
 

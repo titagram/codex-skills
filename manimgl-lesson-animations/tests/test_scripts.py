@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -288,6 +289,36 @@ class ScaffoldTests(unittest.TestCase):
         for label, text in rejected.items():
             with self.subTest(label=label):
                 self.assertFalse(self.scaffold.is_approved(text))
+
+    def test_approval_tracks_indented_fence_character_and_length(self):
+        rejected = {
+            "inside indented fence": (
+                "   ````markdown\nApproval: APPROVED\n   ````\n"
+            ),
+            "after short close": (
+                "````markdown\n```\nApproval: APPROVED\n````\n"
+            ),
+            "mismatched closing character": (
+                "~~~~markdown\n````\nApproval: APPROVED\n~~~~\n"
+            ),
+        }
+        for label, text in rejected.items():
+            with self.subTest(label=label):
+                self.assertFalse(self.scaffold.is_approved(text))
+
+        for closing in ("````", "`````"):
+            with self.subTest(valid_closing=closing):
+                self.assertTrue(
+                    self.scaffold.is_approved(
+                        "   ````markdown\nexample\n"
+                        f"  {closing}\nApproval: APPROVED\n"
+                    )
+                )
+        self.assertTrue(
+            self.scaffold.is_approved(
+                "  ~~~~markdown\nexample\n   ~~~~~\nApproval: APPROVED\n"
+            )
+        )
 
     def test_scaffold_creates_successive_versioned_outputs(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -888,6 +919,71 @@ class RenderTests(unittest.TestCase):
             self.assertEqual(updated["render_history"][-1]["mode"], "frame")
             self.assertEqual(updated["render_history"][-1]["status"], "failed")
 
+    def test_relative_render_candidate_is_canonical_and_verifiable(self):
+        verify = load_script("verify")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            output, _, payload = self.create_scaffold(root)
+            project = output.parents[2]
+            relative_output = output.relative_to(project)
+            relative_manifest = relative_output / "manifest.json"
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(project)
+
+                def renderer(command, check):
+                    directory = Path(command[-1])
+                    directory.mkdir(parents=True, exist_ok=True)
+                    name = "final.mp4" if "--hd" in command else "preview.mp4"
+                    (directory / name).write_bytes(name.encode("utf-8"))
+                    return subprocess.CompletedProcess(command, 0)
+
+                preview_arguments = [
+                    *self.base_arguments(
+                        relative_output, "preview", payload["scene_name"]
+                    ),
+                    "--manifest",
+                    str(relative_manifest),
+                    "--execute",
+                ]
+                self.assertEqual(
+                    self.render.main(preview_arguments, runner=renderer), 0
+                )
+                self.assertEqual(
+                    self.render.main(
+                        [
+                            "--manifest",
+                            str(relative_manifest),
+                            "--record-preview-approval",
+                            "APPROVED",
+                        ]
+                    ),
+                    0,
+                )
+                final_arguments = [
+                    *self.base_arguments(
+                        relative_output, "final", payload["scene_name"]
+                    ),
+                    "--manifest",
+                    str(relative_manifest),
+                    "--execute",
+                ]
+                self.assertEqual(self.render.main(final_arguments, runner=renderer), 0)
+
+                final_artifact = relative_output / "videos" / "final.mp4"
+                manifest, manifest_root = verify.load_manifest(relative_manifest)
+                canonical = verify.authorize_artifact(
+                    manifest, manifest_root, final_artifact
+                )
+                self.assertEqual(canonical, final_artifact.resolve())
+                self.assertEqual(
+                    manifest["render_history"][-1]["candidates"],
+                    [str(final_artifact.resolve())],
+                )
+            finally:
+                os.chdir(original_cwd)
+
     def test_render_execute_reports_created_and_modified_candidates(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -915,7 +1011,8 @@ class RenderTests(unittest.TestCase):
             self.assertEqual(report["exit_state"], "completed")
             self.assertEqual(report["returncode"], 0)
             self.assertEqual(
-                report["candidates"], sorted([str(created), str(existing)])
+                report["candidates"],
+                sorted([str(created.resolve()), str(existing.resolve())]),
             )
 
 
