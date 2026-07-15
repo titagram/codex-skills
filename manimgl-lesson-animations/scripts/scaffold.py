@@ -12,12 +12,21 @@ import tempfile
 import tokenize
 import unicodedata
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
-APPROVAL_RE = re.compile(r"(?m)^Approval:\s*APPROVED\s*$")
+from workflow_state import (
+    DEFAULT_VERIFICATION_CONTRACT,
+    sha256_file,
+    storyboard_approval,
+    utc_now,
+)
+
+
 CLASS_SENTINEL = "TemplateLesson"
 TITLE_SENTINEL = '"{{TITLE}}"'
 VERSION_RE = re.compile(r"v\d{3}$")
@@ -55,8 +64,8 @@ def class_name(value: str) -> str:
 
 
 def is_approved(text: str) -> bool:
-    """Return whether text contains the exact standalone approval marker."""
-    return APPROVAL_RE.search(text) is not None
+    """Return whether text has one exact top-level Markdown approval field."""
+    return storyboard_approval(text) == "APPROVED"
 
 
 def _render_scene(template: str, topic_name: str, scene_name: str) -> str:
@@ -174,8 +183,11 @@ def _manifest(
         },
         "output_choice": output_choice,
         "output_path": str(output_path.resolve()),
+        "storyboard_sha256": sha256_file(storyboard),
+        "verification_contract": dict(DEFAULT_VERIFICATION_CONTRACT),
         "render_history": [],
-        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "verification_history": [],
+        "created_at": utc_now(),
     }
 
 

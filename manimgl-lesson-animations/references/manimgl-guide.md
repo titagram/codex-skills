@@ -20,6 +20,29 @@ Never use Manim Community imports (`from manim import *`) or its `manim` CLI.
 
 Use `--config_file` for the topic configuration and `--video_dir` for explicit output directories.
 
+## Manifest-backed commands
+
+After scaffolding, execute a preview with exact scaffold paths (substitute the topic, version, and scene class):
+
+```sh
+python scripts/render.py --scene animations/concept/v001/scene.py --scene-class ConceptLesson --mode preview --config animations/concept/v001/custom_config.yml --output animations/concept/v001/previews --manifest animations/concept/v001/manifest.json --execute
+```
+
+After the user explicitly approves that preview, record the approval:
+
+```sh
+python scripts/render.py --manifest animations/concept/v001/manifest.json --record-preview-approval APPROVED
+```
+
+Then render and verify the final artifact:
+
+```sh
+python scripts/render.py --scene animations/concept/v001/scene.py --scene-class ConceptLesson --mode final --config animations/concept/v001/custom_config.yml --output animations/concept/v001/videos --manifest animations/concept/v001/manifest.json --execute
+python scripts/verify.py animations/concept/v001/videos/final.mp4 --manifest animations/concept/v001/manifest.json
+```
+
+The final contract requires a video stream, 1920x1080 resolution, exactly 30 fps, and at least 0.5 seconds duration. `verify.py` accepts only a canonical artifact recorded as a successful final candidate and writes the observed duration, resolution, frame rate, media type, and result back to the manifest.
+
 ## Minimal scene
 
 ```python

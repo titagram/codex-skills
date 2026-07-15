@@ -173,6 +173,36 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(reused.returncode, 0, reused.stderr)
             self.assertEqual(marker.read_text(encoding="utf-8"), "unchanged")
 
+    def test_bootstrap_reuse_rejects_nonlocal_or_non_directory_venv(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            external = root / "external-venv"
+            external.mkdir()
+            cases = ("symlink", "file")
+            for case in cases:
+                with self.subTest(case=case):
+                    project = root / case
+                    project.mkdir()
+                    environment = project / ".venv"
+                    if case == "symlink":
+                        environment.symlink_to(external, target_is_directory=True)
+                    else:
+                        environment.write_text("not a venv", encoding="utf-8")
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SKILL_ROOT / "scripts" / "bootstrap.py"),
+                            "--project",
+                            str(project),
+                            "--reuse",
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("local directory", result.stderr.lower())
+
     def test_scripts_start_under_python_3_9(self):
         candidates = [Path("/usr/bin/python3"), Path(sys.executable)]
         python = next(
@@ -244,6 +274,21 @@ class ScaffoldTests(unittest.TestCase):
             self.scaffold.is_approved("# Storyboard\n\nApproval: APPROVED later\n")
         )
 
+    def test_approval_rejects_ambiguous_or_non_top_level_markers(self):
+        rejected = {
+            "duplicate": "Approval: APPROVED\nApproval: APPROVED\n",
+            "mixed": "Approval: PENDING\nApproval: APPROVED\n",
+            "indented": "    Approval: APPROVED\n",
+            "blockquote": "> Approval: APPROVED\n",
+            "fenced": "```markdown\nApproval: APPROVED\n```\n",
+            "example plus field": (
+                "Approval: APPROVED\n\nExample: `Approval: PENDING`\n"
+            ),
+        }
+        for label, text in rejected.items():
+            with self.subTest(label=label):
+                self.assertFalse(self.scaffold.is_approved(text))
+
     def test_scaffold_creates_successive_versioned_outputs(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -281,6 +326,20 @@ class ScaffoldTests(unittest.TestCase):
             self.assertEqual(manifest["output_path"], str(second.resolve()))
             self.assertEqual(
                 manifest["source_paths"]["storyboard"], str(storyboard.resolve())
+            )
+            self.assertEqual(
+                manifest["storyboard_sha256"],
+                self.scaffold.sha256_file(second / "storyboard.md"),
+            )
+            self.assertEqual(
+                manifest["verification_contract"],
+                {
+                    "media_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "frame_rate": "30/1",
+                    "min_duration_seconds": 0.5,
+                },
             )
             self.assertEqual(manifest["render_history"], [])
 
@@ -589,6 +648,7 @@ class RenderTests(unittest.TestCase):
             ({"approval": "PENDING"}, "approved"),
             ({"output_choice": None}, "output choice"),
             ({"render_history": None}, "scaffold"),
+            ({"verification_contract": {}}, "scaffold"),
         )
         for updates, expected_error in cases:
             with self.subTest(updates=updates), tempfile.TemporaryDirectory() as temporary_directory:
@@ -735,6 +795,99 @@ class RenderTests(unittest.TestCase):
                     "preview",
                 )
 
+    def test_render_rechecks_saved_storyboard_marker_and_scaffold_hash(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            output, manifest, payload = self.create_scaffold(root)
+            storyboard = output / "storyboard.md"
+
+            storyboard.write_text(
+                "# Triangoli\n\nApproval: APPROVED\nApproval: PENDING\n",
+                encoding="utf-8",
+            )
+            self.assert_execution_blocked(
+                self.execution_arguments(output, manifest, payload),
+                "storyboard",
+            )
+
+            storyboard.write_text(
+                "# Triangoli changed\n\nApproval: APPROVED\n",
+                encoding="utf-8",
+            )
+            self.assert_execution_blocked(
+                self.execution_arguments(output, manifest, payload),
+                "hash",
+            )
+
+    def test_preview_approval_is_bound_to_successful_render_content_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            output, manifest, payload = self.create_scaffold(root)
+            preview = output / "previews" / "preview.mp4"
+
+            def renderer(command, check):
+                preview.write_bytes(b"preview")
+                return subprocess.CompletedProcess(command, 0)
+
+            self.assertEqual(
+                self.render.main(
+                    self.execution_arguments(output, manifest, payload),
+                    runner=renderer,
+                ),
+                0,
+            )
+            rendered = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(rendered["preview_approval"]["status"], "PENDING")
+            self.assertEqual(
+                set(rendered["preview_approval"]["content_hashes"]),
+                {"storyboard", "scene", "config"},
+            )
+            self.assertEqual(rendered["render_history"][-1]["mode"], "preview")
+            self.assertEqual(rendered["render_history"][-1]["status"], "completed")
+
+            self.assertEqual(
+                self.render.main(
+                    [
+                        "--manifest",
+                        str(manifest),
+                        "--record-preview-approval",
+                        "APPROVED",
+                    ]
+                ),
+                0,
+            )
+            approved = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(approved["preview_approval"]["status"], "APPROVED")
+            self.assertEqual(
+                approved["preview_approval"]["approved_content_hashes"],
+                approved["preview_approval"]["content_hashes"],
+            )
+
+            (output / "scene.py").write_text("# changed\n", encoding="utf-8")
+            self.assert_execution_blocked(
+                self.execution_arguments(output, manifest, approved, mode="final"),
+                "changed",
+            )
+
+    def test_render_history_records_failed_render_as_failed(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            output, manifest, payload = self.create_scaffold(root)
+
+            def failed_renderer(command, check):
+                raise subprocess.CalledProcessError(7, command)
+
+            self.assertEqual(
+                self.render.main(
+                    self.execution_arguments(output, manifest, payload, mode="frame"),
+                    runner=failed_renderer,
+                ),
+                1,
+            )
+            updated = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(updated["render_history"][-1]["mode"], "frame")
+            self.assertEqual(updated["render_history"][-1]["status"], "failed")
+
     def test_render_execute_reports_created_and_modified_candidates(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -814,6 +967,151 @@ class VerifyTests(unittest.TestCase):
         self.assertTrue(any("video" in error.lower() for error in no_video_errors))
         self.assertTrue(any("duration" in error.lower() for error in stopped_errors))
         self.assertTrue(any("frame rate" in error.lower() for error in stopped_errors))
+
+    def test_verify_requires_exact_expected_frame_rate(self):
+        metadata = {
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "24/1",
+                }
+            ],
+            "format": {"duration": "2.0"},
+        }
+        errors = self.verify.validate(
+            metadata,
+            expected_resolution=(1920, 1080),
+            min_duration=0.5,
+            expected_frame_rate="30/1",
+        )
+        self.assertTrue(any("frame rate" in error.lower() for error in errors))
+
+    def test_verify_manifest_workflow_checks_contract_and_records_result(self):
+        scaffold = load_script("scaffold")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = root / "storyboard.md"
+            storyboard.write_text(
+                "# Triangoli\n\nApproval: APPROVED\n", encoding="utf-8"
+            )
+            output = scaffold.scaffold(project, "Triangoli", storyboard)
+            manifest = output / "manifest.json"
+            artifact = output / "videos" / "final.mp4"
+            artifact.write_bytes(b"video")
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["render_history"].append(
+                {
+                    "command": ["manimgl", "scene.py", "TriangoliLesson"],
+                    "mode": "final",
+                    "output": str((output / "videos").resolve()),
+                    "candidates": [str(artifact.resolve())],
+                    "status": "completed",
+                    "returncode": 0,
+                }
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            metadata = {
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "width": 1920,
+                        "height": 1080,
+                        "r_frame_rate": "30/1",
+                    }
+                ],
+                "format": {"duration": "2.0"},
+            }
+            stdout = io.StringIO()
+            with mock.patch.object(self.verify, "probe", return_value=metadata):
+                with redirect_stdout(stdout):
+                    result = self.verify.main(
+                        [str(artifact), "--manifest", str(manifest)]
+                    )
+            self.assertEqual(result, 0, stdout.getvalue())
+            report = json.loads(stdout.getvalue())
+            self.assertTrue(report["ok"])
+            recorded = json.loads(manifest.read_text(encoding="utf-8"))
+            verification = recorded["verification_history"][-1]
+            self.assertEqual(verification["artifact"], str(artifact.resolve()))
+            self.assertEqual(verification["status"], "passed")
+            self.assertEqual(verification["metadata"], metadata)
+            self.assertEqual(verification["observed"]["width"], 1920)
+            self.assertEqual(verification["observed"]["height"], 1080)
+            self.assertEqual(verification["observed"]["frame_rate"], "30/1")
+            self.assertEqual(verification["observed"]["duration_seconds"], "2.0")
+
+    def test_verify_cli_cannot_succeed_without_manifest_or_full_expectations(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            artifact = Path(temporary_directory) / "video.mp4"
+            artifact.write_bytes(b"video")
+            metadata = {
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "width": 1920,
+                        "height": 1080,
+                        "r_frame_rate": "30/1",
+                    }
+                ],
+                "format": {"duration": "2.0"},
+            }
+            stdout = io.StringIO()
+            with mock.patch.object(self.verify, "probe", return_value=metadata):
+                with redirect_stdout(stdout):
+                    result = self.verify.main([str(artifact)])
+            self.assertEqual(result, 1)
+            self.assertIn("manifest", stdout.getvalue().lower())
+
+    def test_verify_rejects_weakened_contract_and_symlinked_artifact(self):
+        scaffold = load_script("scaffold")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = root / "storyboard.md"
+            storyboard.write_text(
+                "# Triangoli\n\nApproval: APPROVED\n", encoding="utf-8"
+            )
+            output = scaffold.scaffold(project, "Triangoli", storyboard)
+            manifest = output / "manifest.json"
+            external = root / "external.mp4"
+            external.write_bytes(b"video")
+            artifact = output / "videos" / "final.mp4"
+            artifact.symlink_to(external)
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["render_history"].append(
+                {
+                    "command": ["manimgl"],
+                    "mode": "final",
+                    "output": str((output / "videos").resolve()),
+                    "candidates": [str(artifact.absolute())],
+                    "status": "completed",
+                    "returncode": 0,
+                }
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+            with mock.patch.object(self.verify, "probe") as probe:
+                self.assertEqual(
+                    self.verify.main([str(artifact), "--manifest", str(manifest)]),
+                    1,
+                )
+                probe.assert_not_called()
+
+            artifact.unlink()
+            artifact.write_bytes(b"video")
+            payload["verification_contract"]["width"] = 1
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            with mock.patch.object(self.verify, "probe") as probe:
+                self.assertEqual(
+                    self.verify.main([str(artifact), "--manifest", str(manifest)]),
+                    1,
+                )
+                probe.assert_not_called()
 
     def test_verify_reports_null_format_as_validation_error(self):
         metadata = {
@@ -901,14 +1199,38 @@ class VerifyTests(unittest.TestCase):
 
     def test_verify_cli_rejects_empty_file_with_json_evidence(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
-            artifact = Path(temporary_directory) / "empty.mp4"
+            root = Path(temporary_directory)
+            scaffold = load_script("scaffold")
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = root / "storyboard.md"
+            storyboard.write_text(
+                "# Empty\n\nApproval: APPROVED\n", encoding="utf-8"
+            )
+            output = scaffold.scaffold(project, "Empty", storyboard)
+            manifest = output / "manifest.json"
+            artifact = output / "videos" / "empty.mp4"
             artifact.touch()
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["render_history"].append(
+                {
+                    "command": ["manimgl"],
+                    "mode": "final",
+                    "output": str((output / "videos").resolve()),
+                    "candidates": [str(artifact.resolve())],
+                    "status": "completed",
+                    "returncode": 0,
+                }
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
 
             result = subprocess.run(
                 [
                     sys.executable,
                     str(SKILL_ROOT / "scripts" / "verify.py"),
                     str(artifact),
+                    "--manifest",
+                    str(manifest),
                 ],
                 check=False,
                 capture_output=True,

@@ -40,7 +40,7 @@ Save the storyboard as Markdown with all of these fields:
 - A scene table with didactic purpose, visuals and transformations, text/formulas, voice pause, and duration
 - A final understanding check
 
-Keep `Approval: PENDING` while proposing or revising the storyboard. Change it to `Approval: APPROVED` only after the user explicitly approves that concrete storyboard. Approval applies only to the described storyboard; obtain reapproval for material changes to its objective, progression, examples, representations, or timing.
+Keep `Approval: PENDING` while proposing or revising the storyboard. The field must be one exact, unindented, top-level Markdown line. Do not repeat it or include another `Approval:` marker in prose, a blockquote, or a fenced/example block. Change the sole field to `Approval: APPROVED` only after the user explicitly approves that concrete storyboard. Approval applies only to those saved bytes; obtain reapproval and scaffold a new version for material changes to its objective, progression, examples, representations, or timing.
 
 ## Clip sizing
 
@@ -49,3 +49,11 @@ Prefer one 20–90 second clip per conceptual move. Split a sequence when its ob
 ## Preview review
 
 Render a final frame or low-quality preview first. Inspect representative frames for legibility, safe margins, continuity, semantic color, visual focus, and sufficient voice pauses. Ask the user to review the preview against the approved learning objective. If the visual progression changes the teaching logic or obscures it, return to `Approval: PENDING`, revise the storyboard, and obtain reapproval before continuing.
+
+After a successful preview, its manifest state is `PENDING`. Only after the user explicitly approves that exact preview, record the decision with:
+
+```sh
+python scripts/render.py --manifest animations/concept/v001/manifest.json --record-preview-approval APPROVED
+```
+
+This approval is bound to SHA-256 hashes of `storyboard.md`, `scene.py`, and `custom_config.yml`. Any edit invalidates final rendering until a new preview is rendered, reviewed, and approved.

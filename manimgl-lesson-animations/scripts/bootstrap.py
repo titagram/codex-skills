@@ -50,8 +50,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     environment = args.project / ".venv"
-    if environment.exists() and not args.reuse:
+    environment_present = os.path.lexists(str(environment))
+    if environment_present and not args.reuse:
         parser.error(f"{environment} already exists; pass --reuse to keep using it.")
+    if environment_present and args.reuse:
+        local_directory = (
+            not environment.is_symlink()
+            and environment.is_dir()
+            and environment.resolve().parent == args.project.resolve()
+        )
+        if not local_directory:
+            parser.error(
+                f"{environment} must be a real project-local directory for --reuse."
+            )
 
     commands = build_commands(args.project, args.python, args.spec)
     for command in commands:
