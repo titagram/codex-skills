@@ -45,14 +45,15 @@ After approval:
 3. When lesson files exist, read [lesson-integration.md](references/lesson-integration.md).
 4. Run `python scripts/doctor.py`; explain blockers.
 5. Obtain separate authorization before `python scripts/bootstrap.py --execute` or any system change.
-6. Run `python scripts/scaffold.py --project /tmp/lesson --topic concept --storyboard /tmp/approved-storyboard.md` with paths for the active project.
-7. Implement the approved scene only.
-8. Render a final frame or low-quality preview with `scripts/render.py`; inspect representative frames visually.
-9. Ask the user to review the preview. Return to the storyboard if the didactic progression fails visually.
-10. Render the final MP4 and run `scripts/verify.py`. Report completion only from verified artifacts.
+6. Resolve the next unused `animations/<topic>/vNNN/` path, starting with `v001`. Present the exact path and require the user to choose explicitly between writing there and force-overwriting a named existing output path. Stop until the user chooses; generic or storyboard approval does not count.
+7. Run `python scripts/scaffold.py --project /tmp/lesson --topic concept --storyboard /tmp/approved-storyboard.md` with paths for the active project.
+8. Implement the approved scene only.
+9. Render a final frame or low-quality preview with `scripts/render.py`; inspect representative frames visually.
+10. Ask the user to review the preview. Return to the storyboard if the didactic progression fails visually.
+11. Render the final MP4 and run `scripts/verify.py`. Report completion only from verified artifacts.
 
 ## Defaults
 
 Prefer modular 20–90 second clips, but support continuous sequences or both. Use 16:9, dark classroom styling, large type, safe margins, semantic colors, continuous transformations, one visual focus, and explicit pauses for the teacher's voice. Do not synthesize audio.
 
-Never overwrite existing sources or outputs without explicit approval. Do not edit slides or teleprompters unless separately requested.
+Never overwrite lesson sources. Overwrite an existing output only when the user explicitly chooses force-overwrite for that exact path. Do not edit slides or teleprompters unless separately requested.

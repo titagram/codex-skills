@@ -9,7 +9,7 @@ ERROR = RED_C
 
 class TemplateLesson(Scene):
     def construct(self):
-        self.camera.background_color = BACKGROUND
+        self.camera.background_rgba = list(color_to_rgba(BACKGROUND))
         title = Text("{{TITLE}}", font="Arial", font_size=54)
         title.to_edge(UP)
         self.play(Write(title))
