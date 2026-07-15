@@ -49,6 +49,24 @@ Calibra l'intera lezione su `minuti × 130` parole con tolleranza del 10%. Numer
 - Se manca l'approvazione esplicita, resta sulla mappa.
 - Se un controllo finale fallisce, correggi prima di consegnare.
 
+## Quick reference
+
+| Stato osservato | Azione successiva |
+|---|---|
+| Manca un dato indispensabile | Chiedine uno solo |
+| Dati sufficienti | Ricerca, scomponi e presenta la mappa |
+| Perimetro incompatibile con tempo o prerequisiti | Proponi un restringimento o più lezioni |
+| Mappa non approvata | Resta sulla mappa |
+| Mappa approvata | Produci e verifica i tre file |
+
+## Common mistakes
+
+- Non ripetere domande sui dati già forniti.
+- Non comprimere un argomento ampio in una panoramica falsamente completa.
+- Non anticipare paragrafi del teleprompter nel turno di approvazione.
+- Non mescolare parlato, fonti e suggerimenti slide.
+- Non dichiarare la verifica senza riportarne l'evidenza.
+
 ## Final verification
 
 Applica i dieci controlli di `references/controlli-qualita.md` e i relativi comandi. Verifica anche che non restino segnaposto, che le tre uscite siano separate e che il teleprompter sia naturale da pronunciare ad alta voce. Riporta durata, conteggio parole, file prodotti e risultato dei controlli senza sostituire l'evidenza con una semplice dichiarazione.
