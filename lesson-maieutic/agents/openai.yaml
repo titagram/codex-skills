@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lezioni maieutiche"
+  short_description: "Lezioni italiane dal concreto al formale"
+  default_prompt: "Usa $lesson-maieutic per progettare una lezione narrata sui monomi per una terza di istituto tecnico, della durata di 20 minuti."

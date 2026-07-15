@@ -1,0 +1,37 @@
+[CAMBIO SLIDE 01]
+
+{{APERTURA_CONCRETA_01}}
+
+{{DOMANDA_AUTENTICA_01}}
+
+[PAUSA BREVE]
+
+{{RISPOSTA_CENTRALE_01}}. Questa distinzione conta perché {{CONSEGUENZA_01}}.
+
+Consideriamo {{ESEMPIO_01}}. Qui {{CRITERIO_VISIBILE_01}}. Confrontiamolo con {{NON_ESEMPIO_01}}: cambia soltanto {{VARIABILE_DISCRIMINANTE_01}}, e per questo {{ESITO_DEL_CONTRASTO_01}}.
+
+Ora possiamo dare un nome alla distinzione che abbiamo osservato: {{TERMINE_TECNICO_01}}.
+
+{{FORMALIZZAZIONE_FRASE_PER_FRASE_01}}. In altre parole, {{RILETTURA_CONCRETA_01}}.
+
+{{PONTE_ARGOMENTATIVO_01}}
+
+[CAMBIO SLIDE 02]
+
+{{APERTURA_DAL_PONTE_PRECEDENTE_02}}
+
+{{DOMANDA_AUTENTICA_02}}
+
+{{RISPOSTA_CENTRALE_02}}. Da qui segue {{CONSEGUENZA_02}}.
+
+Prendiamo {{ESEMPIO_02}}. Il criterio funziona perché {{SPIEGAZIONE_02}}.
+
+Un errore plausibile è {{ERRORE_PLAUSIBILE_02}}. Il passaggio da correggere è {{PUNTO_DI_DEVIAZIONE_02}}; il criterio corretto è {{CRITERIO_CORRETTO_02}}.
+
+Che cosa prevediamo allora per {{CASO_DI_TRASFERIMENTO_02}}? {{SVILUPPO_DEL_TRASFERIMENTO_02}}.
+
+{{FORMALIZZAZIONE_E_PONTE_02}}
+
+{{RIPETERE_LA_SEQUENZA_PER_I_SOTTOCAPITOLI_APPROVATI}}
+
+{{CHIUSURA_CHE_RICOSTRUISCE_IL_CAMMINO_E_IL_NUOVO_POTERE_ESPLICATIVO}}
