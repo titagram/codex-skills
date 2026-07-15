@@ -1,0 +1,4 @@
+interface:
+  display_name: "ManimGL Lesson Animations"
+  short_description: "Progetta animazioni didattiche ManimGL"
+  default_prompt: "Use $manimgl-lesson-animations to discuss and storyboard a silent classroom animation before producing it."

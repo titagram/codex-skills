@@ -1,0 +1,9 @@
+camera:
+  resolution: (1920, 1080)
+  background_color: "#0B1020"
+  fps: 30
+scene:
+  show_animation_progress: false
+  leave_progress_bars: false
+text:
+  font: "Arial"
