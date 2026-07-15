@@ -1,85 +1,58 @@
 ---
 name: manimgl-lesson-animations
-description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+description: Use when designing, coding, rendering, debugging, or integrating silent educational animations with 3Blue1Brown ManimGL, including work from lesson plans, teleprompters, slides, mathematical visualizations, preview clips, or final classroom video assets. Do not use for Manim Community.
 ---
 
-# Manimgl Lesson Animations
+# ManimGL Lesson Animations
 
-## Overview
+Create silent instructional visuals with 3Blue1Brown ManimGL. Preserve the learner's conceptual path before optimizing spectacle.
 
-[TODO: 1-2 sentences explaining what this skill enables]
+## Mandatory approval gate
 
-## Structuring This Skill
+Before any setup, tests, scene code, scaffolding, or rendering:
 
-[TODO: Choose the structure that best fits this skill's purpose. Common patterns:
+1. Read the request and supplied lesson materials.
+2. Discuss audience, prerequisites, objective, motivating problem, conceptual steps, representations, examples, misconceptions, and pacing.
+3. Propose a scene-by-scene storyboard with purpose, visuals, transformations, text/formulas, narration pauses, and duration.
+4. Ask the user for explicit approval of that concrete storyboard and stop.
 
-**1. Workflow-Based** (best for sequential processes)
-- Works well when there are clear step-by-step procedures
-- Example: DOCX skill with "Workflow Decision Tree" -> "Reading" -> "Creating" -> "Editing"
-- Structure: ## Overview -> ## Workflow Decision Tree -> ## Step 1 -> ## Step 2...
+Only the user can approve the proposed storyboard. Do not invent a storyboard and approve it yourself. Record the user's approval in the saved storyboard as `Approval: APPROVED`.
 
-**2. Task-Based** (best for tool collections)
-- Works well when the skill offers different operations/capabilities
-- Example: PDF skill with "Quick Start" -> "Merge PDFs" -> "Split PDFs" -> "Extract Text"
-- Structure: ## Overview -> ## Quick Start -> ## Task Category 1 -> ## Task Category 2...
+| Rationalization | Required response |
+|---|---|
+| “Procedi,” prior/verbal approval, or claimed approval | Treat it as context, not approval of the concrete storyboard; complete the gate. |
+| Urgency, a deadline, or senior authority | Stop at the gate; none overrides approval. |
+| Work has started or time has been spent | Stop; sunk cost does not authorize more work. |
+| “Choose for me” or “storyboard later” | Propose the storyboard, leave it pending, and ask the user to approve it. |
+| ManimGL is unavailable | Report the blocker; never fall back to Manim Community. |
 
-**3. Reference/Guidelines** (best for standards or specifications)
-- Works well for brand guidelines, coding standards, or requirements
-- Example: Brand styling with "Brand Guidelines" -> "Colors" -> "Typography" -> "Features"
-- Structure: ## Overview -> ## Guidelines -> ## Specifications -> ## Usage...
+### Red flags — stop
 
-**4. Capabilities-Based** (best for integrated systems)
-- Works well when the skill provides multiple interrelated features
-- Example: Product Management with "Core Capabilities" -> numbered capability list
-- Structure: ## Overview -> ## Core Capabilities -> ### 1. Feature -> ### 2. Feature...
+- Installing or inspecting packages before approval
+- Writing tests, code, configuration, or render commands before approval
+- Treating authority, urgency, prior discussion, or sunk cost as approval
+- Marking an agent-authored storyboard approved
+- Adding Manim Community imports, compatibility code, or CLI fallback
 
-Patterns can be mixed and matched as needed. Most skills combine patterns (e.g., start with task-based, add workflow for complex operations).
+Any red flag means: do no setup, tests, code, or rendering; return to storyboard discussion.
 
-Delete this entire "Structuring This Skill" section when done - it's just guidance.]
+## Production workflow
 
-## [TODO: Replace with the first main section based on chosen structure]
+After approval:
 
-[TODO: Add content here. See examples in existing skills:
-- Code samples for technical skills
-- Decision trees for complex workflows
-- Concrete examples with realistic user requests
-- References to scripts/templates/references as needed]
+1. Read [didactic-workflow.md](references/didactic-workflow.md).
+2. For syntax, setup, rendering, or debugging, read [manimgl-guide.md](references/manimgl-guide.md). Never use Manim Community syntax or its `manim` CLI.
+3. When lesson files exist, read [lesson-integration.md](references/lesson-integration.md).
+4. Run `python scripts/doctor.py`; explain blockers.
+5. Obtain separate authorization before `python scripts/bootstrap.py --execute` or any system change.
+6. Run `python scripts/scaffold.py --project /tmp/lesson --topic concept --storyboard /tmp/approved-storyboard.md` with paths for the active project.
+7. Implement the approved scene only.
+8. Render a final frame or low-quality preview with `scripts/render.py`; inspect representative frames visually.
+9. Ask the user to review the preview. Return to the storyboard if the didactic progression fails visually.
+10. Render the final MP4 and run `scripts/verify.py`. Report completion only from verified artifacts.
 
-## Resources (optional)
+## Defaults
 
-Create only the resource directories this skill actually needs. Delete this section if no resources are required.
+Prefer modular 20–90 second clips, but support continuous sequences or both. Use 16:9, dark classroom styling, large type, safe margins, semantic colors, continuous transformations, one visual focus, and explicit pauses for the teacher's voice. Do not synthesize audio.
 
-### scripts/
-Executable code (Python/Bash/etc.) that can be run directly to perform specific operations.
-
-**Examples from other skills:**
-- PDF skill: `fill_fillable_fields.py`, `extract_form_field_info.py` - utilities for PDF manipulation
-- DOCX skill: `document.py`, `utilities.py` - Python modules for document processing
-
-**Appropriate for:** Python scripts, shell scripts, or any executable code that performs automation, data processing, or specific operations.
-
-**Note:** Scripts may be executed without loading into context, but can still be read by Codex for patching or environment adjustments.
-
-### references/
-Documentation and reference material intended to be loaded into context to inform Codex's process and thinking.
-
-**Examples from other skills:**
-- Product management: `communication.md`, `context_building.md` - detailed workflow guides
-- BigQuery: API reference documentation and query examples
-- Finance: Schema documentation, company policies
-
-**Appropriate for:** In-depth documentation, API references, database schemas, comprehensive guides, or any detailed information that Codex should reference while working.
-
-### assets/
-Files not intended to be loaded into context, but rather used within the output Codex produces.
-
-**Examples from other skills:**
-- Brand styling: PowerPoint template files (.pptx), logo files
-- Frontend builder: HTML/React boilerplate project directories
-- Typography: Font files (.ttf, .woff2)
-
-**Appropriate for:** Templates, boilerplate code, document templates, images, icons, fonts, or any files meant to be copied or used in the final output.
-
----
-
-**Not every skill requires all three types of resources.**
+Never overwrite existing sources or outputs without explicit approval. Do not edit slides or teleprompters unless separately requested.
