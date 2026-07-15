@@ -96,7 +96,12 @@ def validate(
             errors.append("video frame rate must be positive")
 
     if min_duration is not None:
-        duration_value = metadata.get("format", {}).get("duration")
+        format_metadata = metadata.get("format")
+        duration_value = (
+            format_metadata.get("duration")
+            if isinstance(format_metadata, dict)
+            else None
+        )
         try:
             duration = float(duration_value)
         except (TypeError, ValueError):

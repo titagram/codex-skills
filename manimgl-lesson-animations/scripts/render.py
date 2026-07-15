@@ -16,6 +16,13 @@ MODE_FLAGS = {
 }
 ALLOWED_EXECUTABLES = {"manimgl", "manim-render"}
 OUTPUT_CHOICES = {"new-version", "force-overwrite"}
+MODE_OUTPUT_DIRECTORIES = {
+    "frame": "images",
+    "preview": "previews",
+    "final": "videos",
+}
+SCAFFOLD_STRING_FIELDS = ("topic", "slug", "scene_name", "output_path", "created_at")
+SOURCE_PATH_FIELDS = ("storyboard", "scene_template", "custom_config")
 
 
 def build_command(executable, scene, scene_class, mode, config, output):
@@ -50,17 +57,17 @@ def validate_manifest(manifest, mode):
         raise ValueError("topic manifest must record approved storyboard status")
     if manifest.get("output_choice") not in OUTPUT_CHOICES:
         raise ValueError("topic manifest must record an explicit output choice")
-    if not isinstance(manifest.get("output_path"), str) or not manifest["output_path"]:
-        raise ValueError("topic manifest must record its output path")
     source_paths = manifest.get("source_paths")
     scaffold_fields_are_valid = (
         all(
             isinstance(manifest.get(field), str) and manifest[field]
-            for field in ("topic", "slug", "scene_name")
+            for field in SCAFFOLD_STRING_FIELDS
         )
         and isinstance(source_paths, dict)
-        and isinstance(source_paths.get("storyboard"), str)
-        and bool(source_paths["storyboard"])
+        and all(
+            isinstance(source_paths.get(field), str) and source_paths[field]
+            for field in SOURCE_PATH_FIELDS
+        )
         and isinstance(manifest.get("render_history"), list)
     )
     if not scaffold_fields_are_valid:
@@ -72,16 +79,78 @@ def validate_manifest(manifest, mode):
     return manifest
 
 
+def _scaffold_root(manifest):
+    root = Path(manifest["output_path"])
+    if not root.is_absolute():
+        raise ValueError("scaffold output_path must be absolute")
+    if root.is_symlink():
+        raise ValueError("scaffold output_path must not be a symlink")
+    try:
+        canonical = root.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError(f"scaffold output path does not exist: {root}") from error
+    if not canonical.is_dir():
+        raise ValueError(f"scaffold output path is not a directory: {root}")
+    if root != canonical:
+        raise ValueError("scaffold output_path must be canonical")
+    return canonical
+
+
 def load_manifest(path, mode):
     """Load and validate a scaffold topic manifest for the requested mode."""
     path = Path(path)
+    if path.is_symlink():
+        raise ValueError("scaffold manifest must not be a symlink")
     if not path.is_file():
         raise ValueError(f"topic manifest is not a regular file: {path}")
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         raise ValueError(f"topic manifest is not valid JSON: {error.msg}") from error
-    return validate_manifest(manifest, mode)
+    manifest = validate_manifest(manifest, mode)
+    root = _scaffold_root(manifest)
+    try:
+        canonical_manifest = path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError(f"scaffold manifest does not exist: {path}") from error
+    if canonical_manifest != root / "manifest.json":
+        raise ValueError(
+            "manifest must be the exact <output_path>/manifest.json scaffold file"
+        )
+    return manifest
+
+
+def _require_exact_path(value, expected, label, directory=False):
+    candidate = Path(value)
+    if candidate.is_symlink():
+        raise ValueError(f"{label} must not be a symlink")
+    try:
+        canonical = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError(f"{label} does not exist: {candidate}") from error
+    if canonical != expected:
+        raise ValueError(f"{label} must be the scaffold path {expected}")
+    expected_type = candidate.is_dir() if directory else candidate.is_file()
+    if not expected_type:
+        kind = "directory" if directory else "regular file"
+        raise ValueError(f"{label} is not a {kind}: {candidate}")
+
+
+def authorize_execution(manifest, scene, scene_class, mode, config, output):
+    """Bind executable inputs to the exact files in one scaffold manifest."""
+    root = _scaffold_root(manifest)
+    _require_exact_path(scene, root / "scene.py", "scene")
+    _require_exact_path(config, root / "custom_config.yml", "config")
+    if scene_class != manifest["scene_name"]:
+        raise ValueError(
+            f"scene class must match manifest scene_name: {manifest['scene_name']}"
+        )
+    _require_exact_path(
+        output,
+        root / MODE_OUTPUT_DIRECTORIES[mode],
+        "output",
+        directory=True,
+    )
 
 
 def _snapshot(output):
@@ -161,7 +230,15 @@ def main(argv=None, runner=subprocess.run):
             return 0
         if args.manifest is None:
             raise ValueError("--execute requires an approved scaffold topic manifest")
-        load_manifest(args.manifest, args.mode)
+        manifest = load_manifest(args.manifest, args.mode)
+        authorize_execution(
+            manifest,
+            args.scene,
+            args.scene_class,
+            args.mode,
+            args.config,
+            args.output,
+        )
     except (OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

@@ -448,16 +448,21 @@ class ScaffoldTests(unittest.TestCase):
 class RenderTests(unittest.TestCase):
     def setUp(self):
         self.render = load_script("render")
+        self.scaffold = load_script("scaffold")
 
     @staticmethod
-    def base_arguments(root: Path, mode: str = "preview"):
+    def base_arguments(
+        root: Path,
+        mode: str = "preview",
+        scene_class: str = "TriangleLesson",
+    ):
         return [
             "--executable",
             "manimgl",
             "--scene",
             str(root / "scene.py"),
             "--scene-class",
-            "TriangleLesson",
+            scene_class,
             "--mode",
             mode,
             "--config",
@@ -466,22 +471,52 @@ class RenderTests(unittest.TestCase):
             str(root / {"frame": "images", "preview": "previews", "final": "videos"}[mode]),
         ]
 
+    def create_scaffold(
+        self,
+        root: Path,
+        topic: str = "Triangoli",
+        project_name: str = "lesson",
+    ):
+        project = root / project_name
+        project.mkdir(parents=True)
+        storyboard = root / f"{project_name}-storyboard.md"
+        storyboard.write_text(
+            f"# {topic}\n\nApproval: APPROVED\n",
+            encoding="utf-8",
+        )
+        output = self.scaffold.scaffold(project, topic, storyboard)
+        manifest = output / "manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        return output, manifest, payload
+
+    def execution_arguments(self, output, manifest, payload, mode="preview"):
+        return [
+            *self.base_arguments(output, mode, payload["scene_name"]),
+            "--manifest",
+            str(manifest),
+            "--execute",
+        ]
+
     @staticmethod
-    def write_manifest(root: Path, **updates) -> Path:
-        manifest = {
-            "approval": "APPROVED",
-            "topic": "Triangoli",
-            "slug": "triangoli",
-            "scene_name": "TriangleLesson",
-            "source_paths": {"storyboard": str(root / "storyboard-source.md")},
-            "output_choice": "new-version",
-            "output_path": str(root.resolve()),
-            "render_history": [],
-        }
-        manifest.update(updates)
-        path = root / "manifest.json"
-        path.write_text(json.dumps(manifest), encoding="utf-8")
-        return path
+    def replace_option(arguments, option, value):
+        changed = list(arguments)
+        changed[changed.index(option) + 1] = str(value)
+        return changed
+
+    def assert_execution_blocked(self, arguments, expected_error):
+        calls = []
+
+        def forbidden_runner(*args, **kwargs):
+            calls.append((args, kwargs))
+            raise AssertionError("renderer must not run")
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = self.render.main(arguments, runner=forbidden_runner)
+
+        self.assertEqual(result, 1)
+        self.assertIn(expected_error, stderr.getvalue().lower())
+        self.assertEqual(calls, [])
 
     def test_render_modes_use_manimgl_not_community_cli(self):
         base = dict(
@@ -558,67 +593,155 @@ class RenderTests(unittest.TestCase):
         for updates, expected_error in cases:
             with self.subTest(updates=updates), tempfile.TemporaryDirectory() as temporary_directory:
                 root = Path(temporary_directory)
-                manifest = self.write_manifest(root, **updates)
-                calls = []
+                output, manifest, payload = self.create_scaffold(root)
+                payload.update(updates)
+                manifest.write_text(json.dumps(payload), encoding="utf-8")
 
-                def forbidden_runner(*args, **kwargs):
-                    calls.append((args, kwargs))
-                    raise AssertionError("renderer must not run")
+                self.assert_execution_blocked(
+                    self.execution_arguments(output, manifest, payload),
+                    expected_error,
+                )
 
-                stderr = io.StringIO()
-                with redirect_stderr(stderr):
-                    result = self.render.main(
-                        [
-                            *self.base_arguments(root),
-                            "--manifest",
-                            str(manifest),
-                            "--execute",
-                        ],
-                        runner=forbidden_runner,
+    def test_render_execute_rejects_partial_scaffold_manifest(self):
+        cases = (
+            ("created_at", lambda payload: payload.pop("created_at")),
+            (
+                "source custom_config",
+                lambda payload: payload["source_paths"].pop("custom_config"),
+            ),
+            (
+                "source scene_template",
+                lambda payload: payload["source_paths"].pop("scene_template"),
+            ),
+        )
+        for label, make_partial in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                output, manifest, payload = self.create_scaffold(root)
+                make_partial(payload)
+                manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+                self.assert_execution_blocked(
+                    self.execution_arguments(output, manifest, payload),
+                    "scaffold",
+                )
+
+    def test_render_execute_binds_to_exact_scaffold_manifest_and_paths(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            first, first_manifest, first_payload = self.create_scaffold(
+                root,
+                topic="Triangoli",
+                project_name="first",
+            )
+            second, second_manifest, second_payload = self.create_scaffold(
+                root,
+                topic="Rettangoli",
+                project_name="second",
+            )
+            valid = self.execution_arguments(first, first_manifest, first_payload)
+            copied_manifest = root / "copied-manifest.json"
+            copied_manifest.write_bytes(first_manifest.read_bytes())
+            cases = (
+                (
+                    "copied manifest",
+                    self.replace_option(valid, "--manifest", copied_manifest),
+                    "manifest",
+                ),
+                (
+                    "manifest from another scaffold",
+                    self.replace_option(valid, "--manifest", second_manifest),
+                    "scene",
+                ),
+                (
+                    "foreign scene",
+                    self.replace_option(valid, "--scene", second / "scene.py"),
+                    "scene",
+                ),
+                (
+                    "foreign config",
+                    self.replace_option(
+                        valid,
+                        "--config",
+                        second / "custom_config.yml",
+                    ),
+                    "config",
+                ),
+                (
+                    "foreign scene class",
+                    self.replace_option(
+                        valid,
+                        "--scene-class",
+                        second_payload["scene_name"],
+                    ),
+                    "scene class",
+                ),
+                (
+                    "wrong mode output",
+                    self.replace_option(valid, "--output", first / "videos"),
+                    "output",
+                ),
+            )
+
+            for label, arguments, expected_error in cases:
+                with self.subTest(label=label):
+                    self.assert_execution_blocked(arguments, expected_error)
+
+    def test_render_execute_rejects_missing_or_symlinked_scaffold_paths(self):
+        cases = ("missing scene", "missing output", "symlink scene", "symlink output")
+        for label in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                output, manifest, payload = self.create_scaffold(root)
+                expected_error = "scene" if "scene" in label else "output"
+                external = root / "external"
+                if label == "missing scene":
+                    (output / "scene.py").unlink()
+                elif label == "missing output":
+                    (output / "previews").rmdir()
+                elif label == "symlink scene":
+                    external.write_text("external", encoding="utf-8")
+                    (output / "scene.py").unlink()
+                    (output / "scene.py").symlink_to(external)
+                else:
+                    external.mkdir()
+                    (output / "previews").rmdir()
+                    (output / "previews").symlink_to(
+                        external,
+                        target_is_directory=True,
                     )
 
-                self.assertEqual(result, 1)
-                self.assertIn(expected_error, stderr.getvalue().lower())
-                self.assertEqual(calls, [])
+                self.assert_execution_blocked(
+                    self.execution_arguments(output, manifest, payload),
+                    expected_error,
+                )
 
     def test_render_final_execute_requires_explicit_preview_approval(self):
         for preview_approval in (None, "PENDING"):
             with self.subTest(preview_approval=preview_approval), tempfile.TemporaryDirectory() as temporary_directory:
                 root = Path(temporary_directory)
-                updates = {}
+                output, manifest, payload = self.create_scaffold(root)
                 if preview_approval is not None:
-                    updates["preview_approval"] = preview_approval
-                manifest = self.write_manifest(root, **updates)
-                calls = []
+                    payload["preview_approval"] = preview_approval
+                manifest.write_text(json.dumps(payload), encoding="utf-8")
 
-                def forbidden_runner(*args, **kwargs):
-                    calls.append((args, kwargs))
-                    raise AssertionError("renderer must not run")
-
-                stderr = io.StringIO()
-                with redirect_stderr(stderr):
-                    result = self.render.main(
-                        [
-                            *self.base_arguments(root, mode="final"),
-                            "--manifest",
-                            str(manifest),
-                            "--execute",
-                        ],
-                        runner=forbidden_runner,
-                    )
-
-                self.assertEqual(result, 1)
-                self.assertIn("preview", stderr.getvalue().lower())
-                self.assertEqual(calls, [])
+                self.assert_execution_blocked(
+                    self.execution_arguments(
+                        output,
+                        manifest,
+                        payload,
+                        mode="final",
+                    ),
+                    "preview",
+                )
 
     def test_render_execute_reports_created_and_modified_candidates(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            output = root / "previews"
-            output.mkdir()
+            scaffold, manifest, payload = self.create_scaffold(root)
+            output = scaffold / "previews"
             existing = output / "existing.mp4"
             existing.write_bytes(b"before")
-            manifest = self.write_manifest(root)
             created = output / "created.mp4"
 
             def renderer(command, check):
@@ -630,12 +753,7 @@ class RenderTests(unittest.TestCase):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 result = self.render.main(
-                    [
-                        *self.base_arguments(root),
-                        "--manifest",
-                        str(manifest),
-                        "--execute",
-                    ],
+                    self.execution_arguments(scaffold, manifest, payload),
                     runner=renderer,
                 )
 
@@ -696,6 +814,23 @@ class VerifyTests(unittest.TestCase):
         self.assertTrue(any("video" in error.lower() for error in no_video_errors))
         self.assertTrue(any("duration" in error.lower() for error in stopped_errors))
         self.assertTrue(any("frame rate" in error.lower() for error in stopped_errors))
+
+    def test_verify_reports_null_format_as_validation_error(self):
+        metadata = {
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "30/1",
+                }
+            ],
+            "format": None,
+        }
+
+        errors = self.verify.validate(metadata, (1920, 1080), 1.0)
+
+        self.assertTrue(any("duration" in error.lower() for error in errors))
 
     def test_probe_rejects_empty_file_before_running_ffprobe(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
