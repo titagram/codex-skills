@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -203,6 +204,243 @@ class ScriptTests(unittest.TestCase):
             )
             with self.subTest(name=name):
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class ScaffoldTests(unittest.TestCase):
+    def setUp(self):
+        self.scaffold = load_script("scaffold")
+
+    @staticmethod
+    def write_storyboard(directory: Path, approval: str = "APPROVED") -> Path:
+        storyboard = directory / "storyboard.md"
+        storyboard.write_text(
+            f"# Triangoli\n\nApproval: {approval}\n",
+            encoding="utf-8",
+        )
+        return storyboard
+
+    def test_scaffold_rejects_pending_storyboard_without_writing(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = self.write_storyboard(root, "PENDING")
+
+            with self.assertRaisesRegex(ValueError, "explicitly approved"):
+                self.scaffold.scaffold(project, "Somma angoli", storyboard)
+
+            self.assertFalse((project / "animations").exists())
+
+    def test_approval_requires_a_standalone_approved_line(self):
+        self.assertTrue(
+            self.scaffold.is_approved("# Storyboard\n\nApproval: APPROVED\n")
+        )
+        self.assertFalse(
+            self.scaffold.is_approved("# Storyboard\n\nNote: Approval: APPROVED\n")
+        )
+        self.assertFalse(
+            self.scaffold.is_approved("# Storyboard\n\nApproval: APPROVED later\n")
+        )
+
+    def test_scaffold_creates_successive_versioned_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = self.write_storyboard(root)
+
+            first = self.scaffold.scaffold(project, "Somma angoli", storyboard)
+            marker = first / "keep-from-v001"
+            marker.write_text("unchanged", encoding="utf-8")
+            second = self.scaffold.scaffold(project, "Somma angoli", storyboard)
+
+            self.assertEqual(first, project / "animations" / "somma-angoli" / "v001")
+            self.assertEqual(second, project / "animations" / "somma-angoli" / "v002")
+            self.assertEqual(marker.read_text(encoding="utf-8"), "unchanged")
+            self.assertEqual(
+                {child.name for child in second.iterdir()},
+                {
+                    "storyboard.md",
+                    "scene.py",
+                    "custom_config.yml",
+                    "manifest.json",
+                    "previews",
+                    "images",
+                    "videos",
+                },
+            )
+
+            manifest = json.loads(
+                (second / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["approval"], "APPROVED")
+            self.assertEqual(manifest["scene_name"], "SommaAngoliLesson")
+            self.assertEqual(manifest["output_choice"], "new-version")
+            self.assertEqual(manifest["output_path"], str(second.resolve()))
+            self.assertEqual(
+                manifest["source_paths"]["storyboard"], str(storyboard.resolve())
+            )
+            self.assertEqual(manifest["render_history"], [])
+
+    def test_force_overwrite_requires_explicit_choice_and_exact_path(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = self.write_storyboard(root)
+            first = self.scaffold.scaffold(project, "Somma angoli", storyboard)
+            marker = first / "old-output"
+            marker.write_text("replace me", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "exact output path"):
+                self.scaffold.scaffold(project, "Somma angoli", storyboard, force=True)
+            with self.assertRaisesRegex(ValueError, "force-overwrite"):
+                self.scaffold.scaffold(
+                    project,
+                    "Somma angoli",
+                    storyboard,
+                    output_path=first,
+                )
+
+            overwritten = self.scaffold.scaffold(
+                project,
+                "Somma angoli",
+                storyboard,
+                force=True,
+                output_path=first,
+            )
+
+            self.assertEqual(overwritten, first)
+            self.assertFalse(marker.exists())
+            manifest = json.loads((first / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["output_choice"], "force-overwrite")
+            self.assertEqual(manifest["output_path"], str(first.resolve()))
+
+    def test_force_overwrite_cannot_target_lesson_sources(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = self.write_storyboard(root)
+            lesson_source = project / "teleprompter"
+            lesson_source.mkdir()
+            source_marker = lesson_source / "lesson.txt"
+            source_marker.write_text("do not change", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "versioned animations"):
+                self.scaffold.scaffold(
+                    project,
+                    "Somma angoli",
+                    storyboard,
+                    force=True,
+                    output_path=lesson_source,
+                )
+
+            self.assertEqual(source_marker.read_text(encoding="utf-8"), "do not change")
+
+    def test_force_overwrite_rejects_symlinked_animations_root(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = self.write_storyboard(root)
+            lesson_source = project / "teleprompter" / "somma-angoli" / "v001"
+            lesson_source.mkdir(parents=True)
+            source_marker = lesson_source / "lesson.txt"
+            source_marker.write_text("do not change", encoding="utf-8")
+            (project / "animations").symlink_to(
+                project / "teleprompter",
+                target_is_directory=True,
+            )
+
+            with self.assertRaisesRegex(ValueError, "symlinked"):
+                self.scaffold.scaffold(
+                    project,
+                    "Somma angoli",
+                    storyboard,
+                    force=True,
+                    output_path=project
+                    / "animations"
+                    / "somma-angoli"
+                    / "v001",
+                )
+
+            self.assertEqual(source_marker.read_text(encoding="utf-8"), "do not change")
+
+    def test_template_contract_failures_leave_no_partial_output(self):
+        cases = {
+            "missing class sentinel": (
+                'class OtherLesson(Scene):\n    title = Text("{{TITLE}}")\n'
+            ),
+            "duplicate class sentinel": (
+                'class TemplateLesson(Scene):\n    title = Text("{{TITLE}}")\n'
+                "TemplateLesson = None\n"
+            ),
+            "missing title sentinel": (
+                'class TemplateLesson(Scene):\n    title = Text("Fixed")\n'
+            ),
+            "duplicate title sentinel": (
+                'class TemplateLesson(Scene):\n    title = Text("{{TITLE}}")\n'
+                'OTHER = "{{TITLE}}"\n'
+            ),
+            "generated scene does not compile": (
+                'class TemplateLesson(Scene):\n    title = Text("{{TITLE}}"\n'
+            ),
+        }
+
+        for label, template in cases.items():
+            with self.subTest(
+                label=label
+            ), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                project = root / "lesson"
+                project.mkdir()
+                storyboard = self.write_storyboard(root)
+                assets = root / "assets"
+                assets.mkdir()
+                (assets / "scene-template.py").write_text(template, encoding="utf-8")
+                (assets / "custom_config.yml").write_text(
+                    "camera: {}\n", encoding="utf-8"
+                )
+
+                with mock.patch.object(self.scaffold, "ASSETS_ROOT", assets):
+                    with self.assertRaisesRegex(ValueError, "scene template"):
+                        self.scaffold.scaffold(project, "Somma angoli", storyboard)
+
+                self.assertFalse((project / "animations").exists())
+
+    def test_template_contract_counts_code_sentinels_not_comment_mentions(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "lesson"
+            project.mkdir()
+            storyboard = self.write_storyboard(root)
+            assets = root / "assets"
+            assets.mkdir()
+            (assets / "scene-template.py").write_text(
+                "# TemplateLesson and the quoted token \"{{TITLE}}\" "
+                "are documented here.\n"
+                "class TemplateLesson(Scene):\n"
+                '    title = Text("{{TITLE}}")\n',
+                encoding="utf-8",
+            )
+            (assets / "custom_config.yml").write_text("camera: {}\n", encoding="utf-8")
+
+            with mock.patch.object(self.scaffold, "ASSETS_ROOT", assets):
+                output = self.scaffold.scaffold(project, "Somma angoli", storyboard)
+
+            scene = (output / "scene.py").read_text(encoding="utf-8")
+            self.assertIn("# TemplateLesson", scene)
+            self.assertIn("class SommaAngoliLesson", scene)
+            self.assertIn("Text('Somma angoli')", scene)
+
+    def test_generated_class_name_is_a_valid_identifier(self):
+        generated = self.scaffold.class_name("3 proprietà dell'angolo")
+
+        self.assertEqual(generated, "Topic3ProprietaDellAngoloLesson")
+        self.assertTrue(generated.isidentifier())
+        with self.assertRaisesRegex(ValueError, "class name"):
+            self.scaffold.class_name("💥")
 
 
 if __name__ == "__main__":
