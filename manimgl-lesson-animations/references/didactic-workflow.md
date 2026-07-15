@@ -40,7 +40,7 @@ Save the storyboard as Markdown with all of these fields:
 - A scene table with didactic purpose, visuals and transformations, text/formulas, voice pause, and duration
 - A final understanding check
 
-Keep `Approval: PENDING` while proposing or revising the storyboard. The field must be one exact, unindented, top-level Markdown line. Do not repeat it or include another `Approval:` marker in prose, a blockquote, or a fenced/example block. Change the sole field to `Approval: APPROVED` only after the user explicitly approves that concrete storyboard. Approval applies only to those saved bytes; obtain reapproval and scaffold a new version for material changes to its objective, progression, examples, representations, or timing.
+Keep `Approval: PENDING` while proposing or revising the storyboard. The document must begin with one unindented top-level H1 title; immediately after that title, its next nonblank line must be the one exact, unindented approval field. Comments, sections, metadata, fences, or any other content between the H1 and field invalidate it. Do not repeat it or include another `Approval:` marker in prose, a blockquote, or a fenced/example block. Change the sole field to `Approval: APPROVED` only after the user explicitly approves that concrete storyboard. Approval applies only to those saved bytes; obtain reapproval and scaffold a new version for material changes to its objective, progression, examples, representations, or timing.
 
 ## Clip sizing
 

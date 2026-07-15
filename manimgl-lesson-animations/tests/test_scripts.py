@@ -310,13 +310,44 @@ class ScaffoldTests(unittest.TestCase):
             with self.subTest(valid_closing=closing):
                 self.assertTrue(
                     self.scaffold.is_approved(
+                        "# Storyboard\n\nApproval: APPROVED\n\n"
                         "   ````markdown\nexample\n"
-                        f"  {closing}\nApproval: APPROVED\n"
+                        f"  {closing}\n"
                     )
                 )
         self.assertTrue(
             self.scaffold.is_approved(
-                "  ~~~~markdown\nexample\n   ~~~~~\nApproval: APPROVED\n"
+                "# Storyboard\n\nApproval: APPROVED\n\n"
+                "  ~~~~markdown\nexample\n   ~~~~~\n"
+            )
+        )
+
+    def test_approval_must_immediately_follow_the_h1_title(self):
+        rejected = {
+            "multiline html comment": (
+                "# Storyboard\n\n<!--\nApproval: APPROVED\n-->\n"
+            ),
+            "comment opened in title": (
+                "# Storyboard <!--\nApproval: APPROVED\n-->\n"
+            ),
+            "content section before marker": (
+                "# Storyboard\n\n## Metadata\n\nApproval: APPROVED\n"
+            ),
+        }
+        for label, text in rejected.items():
+            with self.subTest(label=label):
+                self.assertFalse(self.scaffold.is_approved(text))
+
+        template = (
+            self.scaffold.ASSETS_ROOT / "storyboard-template.md"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(
+            self.scaffold.storyboard_approval(template),
+            "PENDING",
+        )
+        self.assertTrue(
+            self.scaffold.is_approved(
+                template.replace("Approval: PENDING", "Approval: APPROVED")
             )
         )
 

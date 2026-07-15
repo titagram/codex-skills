@@ -13,6 +13,7 @@ from pathlib import Path
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 FENCE_CLOSE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})[ \t]*$")
+H1_RE = re.compile(r"^#[ \t]+\S.*$")
 DEFAULT_VERIFICATION_CONTRACT = {
     "media_type": "video",
     "width": 1920,
@@ -27,12 +28,28 @@ def utc_now():
 
 
 def storyboard_approval(text):
-    """Return one exact top-level Markdown approval value, else ``None``."""
+    """Return the approval directly following one top-level H1, else ``None``."""
     if text.count("Approval:") != 1:
         return None
+    lines = text.splitlines()
+    nonblank = [index for index, line in enumerate(lines) if line.strip()]
+    if len(nonblank) < 2:
+        return None
+    title_index, approval_index = nonblank[:2]
+    if H1_RE.fullmatch(lines[title_index]) is None:
+        return None
+    prefix = "\n".join(lines[:approval_index])
+    if "<!--" in prefix or "-->" in prefix:
+        return None
+    approval_line = lines[approval_index]
+    if approval_line not in {"Approval: APPROVED", "Approval: PENDING"}:
+        return None
+
     in_fence = None
-    for line in text.splitlines():
+    for index, line in enumerate(lines):
         if in_fence is not None:
+            if index == approval_index:
+                return None
             closing = FENCE_CLOSE_RE.fullmatch(line)
             if closing:
                 run = closing.group("fence")
@@ -44,8 +61,8 @@ def storyboard_approval(text):
             run = opening.group("fence")
             in_fence = (run[0], len(run))
             continue
-        if line in {"Approval: APPROVED", "Approval: PENDING"}:
-            return line.split(": ", 1)[1]
+        if index == approval_index:
+            return approval_line.split(": ", 1)[1]
     return None
 
 

@@ -16,7 +16,7 @@ Before any setup, tests, scene code, scaffolding, or rendering:
 3. Propose a scene-by-scene storyboard with purpose, visuals, transformations, text/formulas, narration pauses, and duration.
 4. Ask the user for explicit approval of that concrete storyboard and stop.
 
-Only the user can approve the proposed storyboard. Do not invent a storyboard and approve it yourself. Record the user's approval as the single exact top-level Markdown line `Approval: APPROVED`; duplicates, mixed states, indentation, blockquotes, fences, and example markers invalidate it.
+Only the user can approve the proposed storyboard. Do not invent a storyboard and approve it yourself. The document must start with a top-level H1 title, and its next nonblank line must be the single exact top-level Markdown line `Approval: APPROVED`. Duplicates, mixed states, indentation, blockquotes, fences, examples, comments, metadata, or other content between the H1 and approval invalidate it.
 
 | Rationalization | Required response |
 |---|---|
