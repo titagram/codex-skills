@@ -73,7 +73,7 @@ test "$words" -ge "$lower" && test "$words" -le "$upper"
 
 ```bash
 OUT_DIR="${OUT_DIR:-.}"
-awk '$0 ~ /\[CAMBIO SLIDE [0-9][0-9]\]|\[PAUSA BREVE\]/ && $0 !~ /^\[(CAMBIO SLIDE [0-9][0-9]|PAUSA BREVE)\]$/ { print NR ":" $0 > "/dev/stderr"; bad=1 } END { exit bad }' "$OUT_DIR/teleprompter.txt"
+awk '$0 ~ /\[[^]]*\]/ && $0 !~ /^\[(CAMBIO SLIDE [0-9][0-9]|PAUSA BREVE)\]$/ { print NR ":" $0 > "/dev/stderr"; bad=1 } END { exit bad }' "$OUT_DIR/teleprompter.txt"
 ```
 
 ### Numerazione progressiva delle slide
