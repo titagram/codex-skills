@@ -21,9 +21,9 @@ Progetta una nuova lezione narrata in italiano come un'argomentazione dal concre
 1. Ricava dalla richiesta pubblico, indirizzo scolastico, durata, conoscenze presunte, perimetro, traguardo e vincoli di formato. Non richiedere dati già forniti. Se manca più di un dato indispensabile, chiedine uno solo per turno.
 2. Formula un traguardo osservabile e scomponi all'indietro i termini portanti. Sviluppa un prerequisito soltanto se la sua assenza renderebbe incomprensibile un passaggio successivo.
 3. Ricerca fonti autorevoli prima di fissare definizioni, convenzioni ed esempi. Registra quali affermazioni sostiene ogni fonte. Se emergono definizioni affidabili divergenti, esponi le alternative nella mappa e proponi una convenzione da approvare.
-4. Calcola parole e tempi, poi crea e presenta la mappa maieutica completa. Includi per ogni sottocapitolo domanda concettuale, caso concreto, sequenza retorica, esempio, non-esempio, errore, formalizzazione, slide e ponte.
+4. Calcola parole e tempi, poi salva e presenta la mappa maieutica completa come `mappa_maieutica.md` nella cartella di output richiesta. Includi per ogni sottocapitolo domanda concettuale, caso concreto, sequenza retorica, esempio, non-esempio, errore, formalizzazione, slide e ponte.
 5. Fermati al gate di approvazione. Chiedi una decisione esplicita su perimetro, ordine, profondità, convenzioni e distribuzione dei tempi.
-6. Dopo l'approvazione esplicita, incorpora le modifiche concordate e genera `mappa_maieutica.md`, `teleprompter.txt` e `fonti.md` come tre file separati.
+6. Dopo l'approvazione esplicita, incorpora le modifiche concordate nel `mappa_maieutica.md` esistente e completa il set con `teleprompter.txt` e `fonti.md` come tre file separati.
 7. Esegui i controlli finali, correggi ogni difetto e soltanto allora comunica il completamento.
 
 ## Approval gate
