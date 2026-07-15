@@ -1,10 +1,12 @@
 import importlib.util
+import io
 import json
 import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -195,7 +197,7 @@ class ScriptTests(unittest.TestCase):
         if python is None:
             self.skipTest("Python 3.9 interpreter is not available")
 
-        for name in ("doctor", "bootstrap"):
+        for name in ("doctor", "bootstrap", "render", "verify"):
             result = subprocess.run(
                 [str(python), str(SKILL_ROOT / "scripts" / f"{name}.py"), "--help"],
                 check=False,
@@ -441,6 +443,348 @@ class ScaffoldTests(unittest.TestCase):
         self.assertTrue(generated.isidentifier())
         with self.assertRaisesRegex(ValueError, "class name"):
             self.scaffold.class_name("💥")
+
+
+class RenderTests(unittest.TestCase):
+    def setUp(self):
+        self.render = load_script("render")
+
+    @staticmethod
+    def base_arguments(root: Path, mode: str = "preview"):
+        return [
+            "--executable",
+            "manimgl",
+            "--scene",
+            str(root / "scene.py"),
+            "--scene-class",
+            "TriangleLesson",
+            "--mode",
+            mode,
+            "--config",
+            str(root / "custom_config.yml"),
+            "--output",
+            str(root / {"frame": "images", "preview": "previews", "final": "videos"}[mode]),
+        ]
+
+    @staticmethod
+    def write_manifest(root: Path, **updates) -> Path:
+        manifest = {
+            "approval": "APPROVED",
+            "topic": "Triangoli",
+            "slug": "triangoli",
+            "scene_name": "TriangleLesson",
+            "source_paths": {"storyboard": str(root / "storyboard-source.md")},
+            "output_choice": "new-version",
+            "output_path": str(root.resolve()),
+            "render_history": [],
+        }
+        manifest.update(updates)
+        path = root / "manifest.json"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        return path
+
+    def test_render_modes_use_manimgl_not_community_cli(self):
+        base = dict(
+            executable="manimgl",
+            scene=Path("scene.py"),
+            scene_class="TriangleLesson",
+            config=Path("custom_config.yml"),
+        )
+
+        frame = self.render.build_command(
+            mode="frame", output=Path("images"), **base
+        )
+        preview = self.render.build_command(
+            mode="preview", output=Path("previews"), **base
+        )
+        final = self.render.build_command(
+            mode="final", output=Path("videos"), **base
+        )
+
+        self.assertEqual(
+            frame,
+            [
+                "manimgl",
+                "scene.py",
+                "TriangleLesson",
+                "-so",
+                "--config_file",
+                "custom_config.yml",
+                "--video_dir",
+                "images",
+            ],
+        )
+        self.assertIn("-w", preview)
+        self.assertIn("-l", preview)
+        self.assertIn("--hd", final)
+        self.assertEqual(final[0], "manimgl")
+        with self.assertRaisesRegex(ValueError, "Manim Community"):
+            self.render.build_command(
+                executable="manim",
+                mode="preview",
+                output=Path("previews"),
+                **{key: value for key, value in base.items() if key != "executable"},
+            )
+
+    def test_render_dry_run_prints_command_without_manifest_or_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "topic with spaces"
+            output = root / "previews"
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                result = self.render.main(self.base_arguments(root))
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                shlex.split(stdout.getvalue().strip()),
+                self.render.build_command(
+                    "manimgl",
+                    root / "scene.py",
+                    "TriangleLesson",
+                    "preview",
+                    root / "custom_config.yml",
+                    output,
+                ),
+            )
+            self.assertFalse(root.exists())
+
+    def test_render_execute_requires_approved_manifest_and_output_choice(self):
+        cases = (
+            ({"approval": "PENDING"}, "approved"),
+            ({"output_choice": None}, "output choice"),
+            ({"render_history": None}, "scaffold"),
+        )
+        for updates, expected_error in cases:
+            with self.subTest(updates=updates), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                manifest = self.write_manifest(root, **updates)
+                calls = []
+
+                def forbidden_runner(*args, **kwargs):
+                    calls.append((args, kwargs))
+                    raise AssertionError("renderer must not run")
+
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    result = self.render.main(
+                        [
+                            *self.base_arguments(root),
+                            "--manifest",
+                            str(manifest),
+                            "--execute",
+                        ],
+                        runner=forbidden_runner,
+                    )
+
+                self.assertEqual(result, 1)
+                self.assertIn(expected_error, stderr.getvalue().lower())
+                self.assertEqual(calls, [])
+
+    def test_render_final_execute_requires_explicit_preview_approval(self):
+        for preview_approval in (None, "PENDING"):
+            with self.subTest(preview_approval=preview_approval), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                updates = {}
+                if preview_approval is not None:
+                    updates["preview_approval"] = preview_approval
+                manifest = self.write_manifest(root, **updates)
+                calls = []
+
+                def forbidden_runner(*args, **kwargs):
+                    calls.append((args, kwargs))
+                    raise AssertionError("renderer must not run")
+
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    result = self.render.main(
+                        [
+                            *self.base_arguments(root, mode="final"),
+                            "--manifest",
+                            str(manifest),
+                            "--execute",
+                        ],
+                        runner=forbidden_runner,
+                    )
+
+                self.assertEqual(result, 1)
+                self.assertIn("preview", stderr.getvalue().lower())
+                self.assertEqual(calls, [])
+
+    def test_render_execute_reports_created_and_modified_candidates(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            output = root / "previews"
+            output.mkdir()
+            existing = output / "existing.mp4"
+            existing.write_bytes(b"before")
+            manifest = self.write_manifest(root)
+            created = output / "created.mp4"
+
+            def renderer(command, check):
+                self.assertTrue(check)
+                existing.write_bytes(b"modified content")
+                created.write_bytes(b"new content")
+                return subprocess.CompletedProcess(command, 0)
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = self.render.main(
+                    [
+                        *self.base_arguments(root),
+                        "--manifest",
+                        str(manifest),
+                        "--execute",
+                    ],
+                    runner=renderer,
+                )
+
+            report = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(report["exit_state"], "completed")
+            self.assertEqual(report["returncode"], 0)
+            self.assertEqual(
+                report["candidates"], sorted([str(created), str(existing)])
+            )
+
+
+class VerifyTests(unittest.TestCase):
+    def setUp(self):
+        self.verify = load_script("verify")
+
+    def test_verify_reports_wrong_resolution(self):
+        metadata = {
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 854,
+                    "height": 480,
+                    "r_frame_rate": "30/1",
+                }
+            ],
+            "format": {"duration": "2.0"},
+        }
+
+        errors = self.verify.validate(
+            metadata,
+            expected_resolution=(1920, 1080),
+            min_duration=1.0,
+        )
+
+        self.assertTrue(any("resolution" in error.lower() for error in errors))
+
+    def test_verify_validates_stream_type_duration_and_positive_frame_rate(self):
+        no_video = {
+            "streams": [{"codec_type": "audio", "r_frame_rate": "0/0"}],
+            "format": {"duration": "0.5"},
+        }
+        stopped_video = {
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "0/0",
+                }
+            ],
+            "format": {"duration": "0.5"},
+        }
+
+        no_video_errors = self.verify.validate(no_video, None, 1.0)
+        stopped_errors = self.verify.validate(stopped_video, (1920, 1080), 1.0)
+
+        self.assertTrue(any("video" in error.lower() for error in no_video_errors))
+        self.assertTrue(any("duration" in error.lower() for error in stopped_errors))
+        self.assertTrue(any("frame rate" in error.lower() for error in stopped_errors))
+
+    def test_probe_rejects_empty_file_before_running_ffprobe(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            artifact = Path(temporary_directory) / "empty.mp4"
+            artifact.touch()
+            calls = []
+
+            def forbidden_runner(*args, **kwargs):
+                calls.append((args, kwargs))
+                raise AssertionError("ffprobe must not run")
+
+            with self.assertRaisesRegex(ValueError, "empty"):
+                self.verify.probe(artifact, sys.executable, runner=forbidden_runner)
+
+            self.assertEqual(calls, [])
+
+    def test_probe_uses_exact_ffprobe_entries_and_parses_json(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            artifact = Path(temporary_directory) / "lesson.mp4"
+            artifact.write_bytes(b"not empty")
+            metadata = {
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "width": 1920,
+                        "height": 1080,
+                        "r_frame_rate": "30/1",
+                    }
+                ],
+                "format": {"duration": "2.0"},
+            }
+            observed = {}
+
+            def ffprobe_runner(command, check, capture_output, text):
+                observed["command"] = command
+                self.assertTrue(check)
+                self.assertTrue(capture_output)
+                self.assertTrue(text)
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(metadata),
+                    stderr="",
+                )
+
+            result = self.verify.probe(
+                artifact,
+                sys.executable,
+                runner=ffprobe_runner,
+            )
+
+            self.assertEqual(result, metadata)
+            self.assertEqual(
+                observed["command"],
+                [
+                    str(Path(sys.executable).resolve()),
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-show_entries",
+                    "stream=codec_type,width,height,r_frame_rate",
+                    "-of",
+                    "json",
+                    str(artifact),
+                ],
+            )
+
+    def test_verify_cli_rejects_empty_file_with_json_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            artifact = Path(temporary_directory) / "empty.mp4"
+            artifact.touch()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SKILL_ROOT / "scripts" / "verify.py"),
+                    str(artifact),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            report = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(report["ok"])
+            self.assertIsNone(report["metadata"])
+            self.assertTrue(any("empty" in error.lower() for error in report["errors"]))
 
 
 if __name__ == "__main__":
